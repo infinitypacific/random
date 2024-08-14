@@ -1,0 +1,45 @@
+div {
+    height: 50px;
+    width: 50px;
+    display: inline-block;
+}
+
+#a {
+    background: hsl(0, 80%, 80%);
+}
+
+#b {
+    background: hsl(92, 90%, 73%);
+}
+
+#c {
+    background: hsl(184, 100%, 66%);
+}
+
+#d {
+    background: rgb(245, 163, 163);
+}
+
+#e {
+    background: rgb(98.3, 203, 229);
+}
+
+#f {
+    background: rgb(82, 243, 255);
+}
+
+@keyframes fade {
+    0% {
+        background: rgb(245, 163, 163);
+    }
+
+    100% {
+        background: rgb(82, 243, 255);
+    }
+}
+
+#g {
+    display: block;
+    background: rgb(245, 163, 163);
+    animation: fade 2s infinite linear alternate;
+}
