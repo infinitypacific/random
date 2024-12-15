@@ -1,4 +1,7 @@
-import xml.etree.ElementTree as XMLTree
+try:
+    from lxml import etree as XMLTree
+except ImportError:
+    import xml.etree.ElementTree as XMLTree
 import argparse,math
 
 def getTime(s):
@@ -54,7 +57,17 @@ def tsort(arr,carr=[]):
     
     return ([arr[indices[0]],arr[indices[1]],arr[indices[2]]],[carr[indices[0]],carr[indices[1]],carr[indices[2]]]) if(len(carr) > 0) else ([arr[indices[0]],arr[indices[1]],arr[indices[2]]],indices)
         
+#Implemented this cuz i'm stressed
+def simpfrac(n,d):
+    flar = max(n,d)
+    fmod = min(n,d)
+    while(fmod != 0):
+        tmod = flar%fmod
+        flar = fmod
+        fmod = tmod
     
+    return n//flar,d//flar
+
 def quickSort(arr,carr=[]):
     #In testing
     if(len(carr) == 0):
@@ -100,9 +113,9 @@ parser.add_argument("file",help='The filename of the timeline',nargs='+',type=st
 parser.add_argument("-t","--time",help='The time to cut (number)',nargs='?',type=float)
 parser.add_argument("-l","--long",help='Cut longer than the time?',nargs='?',default=False,type=bool)
 parser.add_argument("-f","--frame",help='Interpret time as frame amount (will be floored)',nargs='?',default=False,type=bool)
-parser.add_argument("-r","--ripple",help='Ripple cut?',nargs='?',default=True,type=bool)
+parser.add_argument("-r","--ripple",help='Ripple cut? (Default true)',nargs='?',default=True,type=bool)
 args = parser.parse_args()
-#input(args.frame) #ohh so just adding (-f + whatever) enables it
+#input(args.ripple) #ohh so just adding (-f + whatever) enables it
 #FCPFile = []
 
 if(args.time is None):
@@ -139,7 +152,7 @@ for i in range(len(args.file)):
             ntime = time
             if(not args.frame):
                 ntime *= fps
-            input(ntime);
+            #input(ntime);
             print("Project "+projects[k].attrib['name']+" fps: "+str(fps))
             if(sequence is None):
                 raise Exception("Project "+projects[k].attrib['name']+" is missing a sequence!")
@@ -149,19 +162,24 @@ for i in range(len(args.file)):
             lanemtx = []
             lanemtxid = []
             for l in range(len(spine)-1,-1,-1):
-                print(l)
+                #print(l)
                 match spine[l].tag:
                     case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
-                        ndur = normalizeTime(spine[l].attrib["duration"],fps)
-                        print(ndur)
-                        if((args.long and ntime < ndur) or (not args.long and ntime >= ndur)):
-                            print("RemoveClip")
+                        pndur = normalizeTime(spine[l].attrib["duration"],fps)
+                        #print(ndur)
+                        if((args.long and ntime < pndur) or (not args.long and ntime >= pndur)):
+                            pnoff = normalizeTime(spine[l].attrib["offset"],fps)
+                            pnstt = normalizeTime(spine[l].attrib["start"],fps)
+                            #print("RemoveClip")
                             #move front clips back
                             if(args.ripple):
                                 for m in range(l+1,len(spine)):
                                     noff = normalizeTime(spine[m].attrib["offset"],fps)
-                                    noff -= ndur
-                                    spine[m].attrib["offset"] = str(math.floor(noff)) + "/" + str(int(fps)) + "s"
+                                    noff -= pndur
+                                    sn,sd = simpfrac(int(noff),int(fps))
+                                    #print(sn)
+                                    #print(sd)
+                                    spine[m].attrib["offset"] = str(sn) + "/" + str(sd) + "s"
                                     #Audio child tags seems to follow the video's offset so ye
                             #Collect child clips to keep if parent is removed
                             for m in range(len(spine[l])):
@@ -178,7 +196,14 @@ for i in range(len(args.file)):
                                         else:
                                             lanemtxid.append(rlane)
                                             lanemtx.append([spine[l][m]])
-                                        #Mar:Proposal Add ripple cutting here?
+                                        
+                                        #normalizing offset to be subtracted from recieving start spine[l][m].offset = (spine[l][m].offset-reciever.offset)+reciever.start 
+                                        #spine[l][m].offset = (spine[l][m].offset-spine[l].start)+spine[l].offset
+                                        cnoff = (normalizeTime(spine[l][m].attrib["offset"],fps)-pnstt)+pnoff
+                                        sn,sd = simpfrac(int(cnoff),int(fps))
+                                        spine[l][m].attrib["offset"] = str(sn) + "/" + str(sd) + "s";
+                                        spine[l].remove(spine[l][m])
+                                        #print("hi")
                                         """
                                         if(args.ripple):
                                             noff = normalizeTime(spine[l][m].attrib["offset"],fps)
@@ -198,6 +223,8 @@ for i in range(len(args.file)):
                                         else:
                                             lanemtxid.append(rlane)
                                             lanemtx.append([spine[l][m]])
+                                        #spine[l].remove(spine[l][m])
+                                        #print("bye")
                     case "gap":
                         for m in range(len(spine[l])):
                             if("lane" not in spine[l][m].keys()): continue
@@ -209,6 +236,8 @@ for i in range(len(args.file)):
                                     else:
                                         lanemtxid.append(rlane)
                                         lanemtx.append([spine[l][m]])
+                                    #spine[l].remove(spine[l][m])
+                                    #print("hello")
             #Quicksort for edge cases:
             durmtx = []
             #print(lanemtx)  
@@ -227,16 +256,25 @@ for i in range(len(args.file)):
                     #ndur = normalizeTime(lanemtx[l][m].attrib["duration"],fps)
                     #print("ndur" + str(ndur));
                     #print("durmtx" + str(durmtx[l][m]));
+                    print(lanemtx[l][m])
+                    childclippar = lanemtx[l][m].getparent()
+                    #print(childclippar)
                     if((args.long and ntime < durmtx[l][m]) or (not args.long and ntime >= durmtx[l][m])):
                         #print("RemoveClip")
-                        if(args.ripple):
-                            for n in range(m+1,len(lanemtx[l])):
-                                noff = normalizeTime(lanemtx[l][n].attrib["offset"],fps)
-                                noff -= durmtx[l][m]
-                                lanemtx[l][n].attrib["offset"] = str(math.floor(noff)) + "/" + str(int(fps)) + "s"
-                                #Audio child tags seems to follow the video's offset so ye
+                        #child offsets are relative to parent start
+                        if(childclippar is not None):
+                            childclippar.remove(lanemtx[i])
+                        else:
+                            if(args.ripple):
+                                for n in range(m+1,len(lanemtx[l])):
+                                    #Doesn't work because sorted by duration (why did I do that? i forgor)
+                                    noff = normalizeTime(lanemtx[l][n].attrib["offset"],fps)
+                                    noff -= durmtx[l][m]
+                                    sn,sd = simpfrac(int(noff),int(fps))
+                                    lanemtx[l][n].attrib["offset"] = str(int(sn)) + "/" + str(int(sd)) + "s"
                     else:
-                        lazyelm.append(lanemtx[l][m])
+                        if(childclippar is None):
+                            lazyelm.append(lanemtx[l][m])
     
     #FCPFile[i].truncate(0)
     #FCPFile[i].seek(0)
