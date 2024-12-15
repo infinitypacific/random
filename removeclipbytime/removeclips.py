@@ -56,23 +56,25 @@ def tsort(arr,carr=[]):
         
     
 def quickSort(arr,carr=[]):
+    #In testing
     if(len(carr) == 0):
         carr = list(range(len(arr)))
     if(len(arr) > 3):
-        oindex = [0,len(arr)//2,len(arr)-1]
-        pivsort,ipivsort = tsort([arr[0],arr[oindex[1]],arr[oindex[2]]])
+        oindex = [len(arr)//2,len(arr)-1]
+        pivsort,ipivsort = tsort([arr[0],arr[oindex[0]],arr[oindex[1]]],[carr[0],carr[oindex[0]],carr[oindex[1]]])
+        #get pivot from a trisort of begin,mid,end
         arr[0] = pivsort[0]
-        arr[oindex[2]] = pivsort[2]
-        arr.pop(oindex[1])
+        arr[oindex[1]] = pivsort[2]
+        arr.pop(oindex[0])
         arr.append(pivsort[1])
-        carr[0] = oindex[ipivsort[0]]
-        carr[oindex[2]] = oindex[ipivsort[2]]
-        carr.pop(oindex[1])
-        carr.append(oindex[ipivsort[1]])
+        carr[0] = ipivsort[0]
+        carr[oindex[1]] = ipivsort[2]
+        carr.pop(oindex[0])
+        carr.append(ipivsort[1])
         #print(carr)
         si = -1
         for i in range(len(arr)):
-            if(arr[i]<=arr[oindex[2]]):
+            if(arr[i]<=arr[oindex[1]]):
                 si+=1
                 if(i>si):
                     carr[i],carr[si] = carr[si],carr[i]
@@ -95,10 +97,12 @@ def quickSort(arr,carr=[]):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("file",help='The filename of the timeline',nargs='+',type=str)
-parser.add_argument("-t","--time",help='The time to cut',nargs='?',type=float)
+parser.add_argument("-t","--time",help='The time to cut (number)',nargs='?',type=float)
 parser.add_argument("-l","--long",help='Cut longer than the time?',nargs='?',default=False,type=bool)
 parser.add_argument("-f","--frame",help='Interpret time as frame amount (will be floored)',nargs='?',default=False,type=bool)
+parser.add_argument("-r","--ripple",help='Ripple cut?',nargs='?',default=True,type=bool)
 args = parser.parse_args()
+#input(args.frame) #ohh so just adding (-f + whatever) enables it
 #FCPFile = []
 
 if(args.time is None):
@@ -131,58 +135,106 @@ for i in range(len(args.file)):
             fps = fpsd/fpsn
             #Normalize everything to fps because dividing to seconds can result in floating point errors and inconsistencies
             #time = numer*(fps/denom)
+            #Except fps needs to be int upon used in attributes
+            ntime = time
             if(not args.frame):
-                time *= fps
-            
+                ntime *= fps
+            input(ntime);
             print("Project "+projects[k].attrib['name']+" fps: "+str(fps))
             if(sequence is None):
                 raise Exception("Project "+projects[k].attrib['name']+" is missing a sequence!")
             spine = sequence.find('spine')
             if(spine is None):
-                raise Exception("Project "+projects[k].attrib['name']+" is missing a sequence!")
+                raise Exception("Project "+projects[k].attrib['name']+" is missing a spine!")
             lanemtx = []
+            lanemtxid = []
             for l in range(len(spine)-1,-1,-1):
                 print(l)
                 match spine[l].tag:
                     case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
                         ndur = normalizeTime(spine[l].attrib["duration"],fps)
                         print(ndur)
-                        if((args.long and time < ndur) or (not args.long and time >= ndur)):
+                        if((args.long and ntime < ndur) or (not args.long and ntime >= ndur)):
                             print("RemoveClip")
-                            for m in range(l+1,len(spine)):
-                                noff = normalizeTime(spine[m].attrib["offset"],fps)
-                                noff -= ndur
-                                spine[m].attrib["offset"] = str(math.floor(noff)) + "/30s"
-                                #Audio child tags seems to follow the video's offset so ye
+                            #move front clips back
+                            if(args.ripple):
+                                for m in range(l+1,len(spine)):
+                                    noff = normalizeTime(spine[m].attrib["offset"],fps)
+                                    noff -= ndur
+                                    spine[m].attrib["offset"] = str(math.floor(noff)) + "/" + str(int(fps)) + "s"
+                                    #Audio child tags seems to follow the video's offset so ye
+                            #Collect child clips to keep if parent is removed
                             for m in range(len(spine[l])):
                                 if("lane" not in spine[l][m].keys()): continue
                                 match spine[l][m].tag:
                                     case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
                                         rlane = int(spine[l][m].attrib["lane"])
+                                        """
                                         for n in range(rlane-len(lanemtx)): lanemtx.append([])
                                         lanemtx[rlane-1].append(spine[l][m])
+                                        """
+                                        if(rlane in lanemtxid):
+                                            lanemtx[lanemtxid.index(rlane)].append(spine[l][m]);
+                                        else:
+                                            lanemtxid.append(rlane)
+                                            lanemtx.append([spine[l][m]])
+                                        #Mar:Proposal Add ripple cutting here?
+                                        """
+                                        if(args.ripple):
+                                            noff = normalizeTime(spine[l][m].attrib["offset"],fps)
+                                            noff -= ndur
+                                            spine[l][m].attrib["offset"] = str(math.floor(noff)) + "/" + str(int(fps)) + "s"
+                                        #Wait i'm stupid, this won't affect all of the videos in this lane
+                                        """
                             spine.remove(spine[l])
+                        else:
+                            for m in range(len(spine[l])):
+                                if("lane" not in spine[l][m].keys()): continue
+                                match spine[l][m].tag:
+                                    case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
+                                        rlane = int(spine[l][m].attrib["lane"])
+                                        if(rlane in lanemtxid):
+                                            lanemtx[lanemtxid.index(rlane)].append(spine[l][m]);
+                                        else:
+                                            lanemtxid.append(rlane)
+                                            lanemtx.append([spine[l][m]])
+                    case "gap":
+                        for m in range(len(spine[l])):
+                            if("lane" not in spine[l][m].keys()): continue
+                            match spine[l][m].tag:
+                                case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
+                                    rlane = int(spine[l][m].attrib["lane"])
+                                    if(rlane in lanemtxid):
+                                        lanemtx[lanemtxid.index(rlane)].append(spine[l][m]);
+                                    else:
+                                        lanemtxid.append(rlane)
+                                        lanemtx.append([spine[l][m]])
             #Quicksort for edge cases:
             durmtx = []
+            #print(lanemtx)  
             for l in range(len(lanemtx)):
-                durmtx.append([])
+                durmtx.append([]) #Append an empty list for each lane cuz python stupid
                 for m in range(len(lanemtx[l])):
                     durmtx[l].append(normalizeTime(lanemtx[l][m].attrib["duration"],fps))
-            print(lanemtx)
+                durmtx[l],lanemtx[l] = quickSort(durmtx[l],lanemtx[l]);
+            #print(lanemtx)
             if(len(spine) == 0):
+                #Append gap to hold child clips if nothing in spine
                 spine.append(XMLTree.Element("gap", attrib={"start":"3600/1s","name":"Gap","offset":"3600/1s","duration":"0/1s"}))
             lazyelm = spine[0]
             for l in range(len(lanemtx)):
                 for m in range(len(lanemtx[l])):
-                    ndur = normalizeTime(lanemtx[l][m].attrib["duration"],fps)
-                    print(ndur)
-                    if((args.long and time < ndur) or (not args.long and time >= ndur)):
-                        print("RemoveClip")
-                        for n in range(m+1,len(lanemtx[l])):
-                            noff = normalizeTime(lanemtx[l][n].attrib["offset"],fps)
-                            noff -= ndur
-                            spine[m].attrib["offset"] = str(math.floor(noff)) + "/30s"
-                            #Audio child tags seems to follow the video's offset so ye
+                    #ndur = normalizeTime(lanemtx[l][m].attrib["duration"],fps)
+                    #print("ndur" + str(ndur));
+                    #print("durmtx" + str(durmtx[l][m]));
+                    if((args.long and ntime < durmtx[l][m]) or (not args.long and ntime >= durmtx[l][m])):
+                        #print("RemoveClip")
+                        if(args.ripple):
+                            for n in range(m+1,len(lanemtx[l])):
+                                noff = normalizeTime(lanemtx[l][n].attrib["offset"],fps)
+                                noff -= durmtx[l][m]
+                                lanemtx[l][n].attrib["offset"] = str(math.floor(noff)) + "/" + str(int(fps)) + "s"
+                                #Audio child tags seems to follow the video's offset so ye
                     else:
                         lazyelm.append(lanemtx[l][m])
     
