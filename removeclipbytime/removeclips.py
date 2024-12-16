@@ -166,10 +166,32 @@ for i in range(len(args.file)):
                 match spine[l].tag:
                     case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
                         pndur = normalizeTime(spine[l].attrib["duration"],fps)
+                        pnoff = normalizeTime(spine[l].attrib["offset"],fps)
+                        pnstt = normalizeTime(spine[l].attrib["start"],fps)
                         #print(ndur)
-                        if((args.long and ntime < pndur) or (not args.long and ntime >= pndur)):
-                            pnoff = normalizeTime(spine[l].attrib["offset"],fps)
-                            pnstt = normalizeTime(spine[l].attrib["start"],fps)
+                        premflag = (args.long and ntime < pndur) or (not args.long and ntime >= pndur)
+                        #Collect child clips to keep if parent is removed
+                        for m in range(len(spine[l])):
+                            match spine[l][m].tag:
+                                case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
+                                    if("lane" not in spine[l][m].keys()): continue
+                                    rlane = int(spine[l][m].attrib["lane"])
+                                    if(rlane in lanemtxid):
+                                        lanemtx[lanemtxid.index(rlane)].append(spine[l][m]);
+                                    else:
+                                        lanemtxid.append(rlane)
+                                        lanemtx.append([spine[l][m]])
+                                    
+                                    #normalizing offset to be subtracted from recieving start spine[l][m].offset = (spine[l][m].offset-reciever.offset)+reciever.start 
+                                    #spine[l][m].offset = (spine[l][m].offset-spine[l].start)+spine[l].offset
+                                    cnoff = (normalizeTime(spine[l][m].attrib["offset"],fps)-pnstt)+pnoff
+                                    #sn,sd = simpfrac(int(cnoff),int(fps))
+                                    #spine[l][m].attrib["offset"] = str(sn) + "/" + str(sd) + "s";
+                                    spine[l][m].attrib["offset"] = str(cnoff)
+                                    print(spine[l][m].attrib["duration"] + ": " + str(cnoff))
+                                    if(premflag):
+                                        spine[l].remove(spine[l][m])
+                        if(premflag):
                             #print("RemoveClip")
                             #move front clips back
                             if(args.ripple):
@@ -181,51 +203,10 @@ for i in range(len(args.file)):
                                     #print(sd)
                                     spine[m].attrib["offset"] = str(sn) + "/" + str(sd) + "s"
                                     #Audio child tags seems to follow the video's offset so ye
-                            #Collect child clips to keep if parent is removed
-                            for m in range(len(spine[l])):
-                                if("lane" not in spine[l][m].keys()): continue
-                                match spine[l][m].tag:
-                                    case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
-                                        rlane = int(spine[l][m].attrib["lane"])
-                                        """
-                                        for n in range(rlane-len(lanemtx)): lanemtx.append([])
-                                        lanemtx[rlane-1].append(spine[l][m])
-                                        """
-                                        if(rlane in lanemtxid):
-                                            lanemtx[lanemtxid.index(rlane)].append(spine[l][m]);
-                                        else:
-                                            lanemtxid.append(rlane)
-                                            lanemtx.append([spine[l][m]])
-                                        
-                                        #normalizing offset to be subtracted from recieving start spine[l][m].offset = (spine[l][m].offset-reciever.offset)+reciever.start 
-                                        #spine[l][m].offset = (spine[l][m].offset-spine[l].start)+spine[l].offset
-                                        cnoff = (normalizeTime(spine[l][m].attrib["offset"],fps)-pnstt)+pnoff
-                                        sn,sd = simpfrac(int(cnoff),int(fps))
-                                        spine[l][m].attrib["offset"] = str(sn) + "/" + str(sd) + "s";
-                                        spine[l].remove(spine[l][m])
-                                        #print("hi")
-                                        """
-                                        if(args.ripple):
-                                            noff = normalizeTime(spine[l][m].attrib["offset"],fps)
-                                            noff -= ndur
-                                            spine[l][m].attrib["offset"] = str(math.floor(noff)) + "/" + str(int(fps)) + "s"
-                                        #Wait i'm stupid, this won't affect all of the videos in this lane
-                                        """
                             spine.remove(spine[l])
-                        else:
-                            for m in range(len(spine[l])):
-                                if("lane" not in spine[l][m].keys()): continue
-                                match spine[l][m].tag:
-                                    case ("clip" | "video" | "asset-clip" | "title" | "ref-clip"):
-                                        rlane = int(spine[l][m].attrib["lane"])
-                                        if(rlane in lanemtxid):
-                                            lanemtx[lanemtxid.index(rlane)].append(spine[l][m]);
-                                        else:
-                                            lanemtxid.append(rlane)
-                                            lanemtx.append([spine[l][m]])
-                                        #spine[l].remove(spine[l][m])
-                                        #print("bye")
                     case "gap":
+                        pnoff = normalizeTime(spine[l].attrib["offset"],fps)
+                        pnstt = normalizeTime(spine[l].attrib["start"],fps)
                         for m in range(len(spine[l])):
                             if("lane" not in spine[l][m].keys()): continue
                             match spine[l][m].tag:
@@ -238,44 +219,70 @@ for i in range(len(args.file)):
                                         lanemtx.append([spine[l][m]])
                                     #spine[l].remove(spine[l][m])
                                     #print("hello")
+                                    cnoff = (normalizeTime(spine[l][m].attrib["offset"],fps)-pnstt)+pnoff
+                                    #sn,sd = simpfrac(int(cnoff),int(fps))
+                                    #spine[l][m].attrib["offset"] = str(sn) + "/" + str(sd) + "s";
+                                    print(cnoff)
+                                    spine[l][m].attrib["offset"] = str(cnoff)
             #Quicksort for edge cases:
             durmtx = []
             #print(lanemtx)  
             for l in range(len(lanemtx)):
                 durmtx.append([]) #Append an empty list for each lane cuz python stupid
                 for m in range(len(lanemtx[l])):
-                    durmtx[l].append(normalizeTime(lanemtx[l][m].attrib["duration"],fps))
+                    #durmtx[l].append(normalizeTime(lanemtx[l][m].attrib["duration"],fps))
+                    durmtx[l].append(float(lanemtx[l][m].attrib["offset"]))
                 durmtx[l],lanemtx[l] = quickSort(durmtx[l],lanemtx[l]);
             #print(lanemtx)
             if(len(spine) == 0):
                 #Append gap to hold child clips if nothing in spine
                 spine.append(XMLTree.Element("gap", attrib={"start":"3600/1s","name":"Gap","offset":"3600/1s","duration":"0/1s"}))
             lazyelm = spine[0]
-            for l in range(len(lanemtx)):
-                for m in range(len(lanemtx[l])):
-                    #ndur = normalizeTime(lanemtx[l][m].attrib["duration"],fps)
+            #print(len(lanemtx))
+            for l in range(len(lanemtx)-1,-1,-1):
+                for m in range(len(lanemtx[l])-1,-1,-1):
+                    ndur = normalizeTime(lanemtx[l][m].attrib["duration"],fps)
                     #print("ndur" + str(ndur));
                     #print("durmtx" + str(durmtx[l][m]));
-                    print(lanemtx[l][m])
+                    #print(lanemtx[l][m])
                     childclippar = lanemtx[l][m].getparent()
                     #print(childclippar)
-                    if((args.long and ntime < durmtx[l][m]) or (not args.long and ntime >= durmtx[l][m])):
+                    #if((args.long and ntime < durmtx[l][m]) or (not args.long and ntime >= durmtx[l][m])):
+                    if((args.long and ntime < ndur) or (not args.long and ntime >= ndur)):
+                        print("Removed this one: " + str(ndur))
+                        #print("Remove: " + str(l) + ":" + str(m))
                         #print("RemoveClip")
                         #child offsets are relative to parent start
                         if(childclippar is not None):
-                            childclippar.remove(lanemtx[i])
-                        else:
-                            if(args.ripple):
-                                for n in range(m+1,len(lanemtx[l])):
-                                    #Doesn't work because sorted by duration (why did I do that? i forgor)
-                                    noff = normalizeTime(lanemtx[l][n].attrib["offset"],fps)
-                                    noff -= durmtx[l][m]
-                                    sn,sd = simpfrac(int(noff),int(fps))
-                                    lanemtx[l][n].attrib["offset"] = str(int(sn)) + "/" + str(int(sd)) + "s"
+                            childclippar.remove(lanemtx[l])
+                        if(args.ripple):
+                            for n in range(m+1,len(lanemtx[l])):
+                                #Doesn't work because sorted by duration (why did I do that? i forgor)
+                                #noff = normalizeTime(lanemtx[l][n].attrib["offset"],fps)
+                                #print("erm" + lanemtx[l][n].attrib["offset"])
+                                #noff = durmtx[l][n]
+                                #noff -= durmtx[l][m]
+                                #noff -= ndur
+                                #sn,sd = simpfrac(int(noff),int(fps))
+                                #lanemtx[l][n].attrib["offset"] = str(int(sn)) + "/" + str(int(sd)) + "s"
+                                print(lanemtx[l][n].attrib["duration"] + ": " + str(durmtx[l][n]))
+                                durmtx[l][n] -= ndur
+                        #Repeat assign prob!
+                        lanemtx[l].pop(m)
+                        durmtx[l].pop(m)
                     else:
+                        #print(childclippar)
                         if(childclippar is None):
                             lazyelm.append(lanemtx[l][m])
-    
+            
+            for l in range(len(lanemtx)):
+                for m in range(len(lanemtx[l])):
+                    print("Correct: " + str(l) + ":" + str(m))
+                    #this is where the error is prob
+                    childclippar = lanemtx[l][m].getparent()
+                    noff = (durmtx[l][m]-normalizeTime(childclippar.attrib["offset"],fps))+normalizeTime(childclippar.attrib["start"],fps)
+                    sn,sd = simpfrac(int(noff),int(fps))
+                    lanemtx[l][m].attrib["offset"] = str(int(sn)) + "/" + str(int(sd)) + "s"
     #FCPFile[i].truncate(0)
     #FCPFile[i].seek(0)
     #FCPFile[i].close()
