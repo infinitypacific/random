@@ -16,7 +16,7 @@ def resizeImages(input_dir, output_dir):
         top = (height//2 - hside)
         base_name = filename.split(".")[0]
         out_path = os.path.join(output_dir, base_name+".webp")
-        img.crop((left, top, left + side, top + side)).resize((500, 500), Image.Resampling.LANCZOS).save(out_path, "WEBP")
+        img.crop((left, top, left + side, top + side)).resize((250, 250), Image.Resampling.LANCZOS).save(out_path, "WEBP")
         print("[INFO]: Resized "+filename+" to "+out_path)
 
 if __name__ == '__main__':
