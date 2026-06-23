@@ -1,0 +1,15 @@
+body {
+}
+
+div {
+  background: black;
+  border-radius: 0px;
+  transition: border-radius .3s ease-in-out;
+  width: 200px;
+  height: 500px;
+  transform: translate(calc(50vw - 50%),calc(50vh - 50%));
+}
+
+div:hover {
+  border-radius: 50% 0 0 50%;
+}
