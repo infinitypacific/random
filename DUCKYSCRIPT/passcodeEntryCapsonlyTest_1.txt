@@ -1,0 +1,99 @@
+REM TITLE PASSCODE_ENTRY_CAPSONLY Testing!
+REM AUTHOR Frostbyte
+REM DESCRIPTION Test the time-based passcode library!
+ATTACKMODE HID
+EXTENSION DETECT_READY
+    REM VERSION 1.1
+    REM AUTHOR: Korben
+
+    REM_BLOCK DOCUMENTATION
+        USAGE:
+            Extension runs inline (here)
+            Place at beginning of payload (besides ATTACKMODE) to act as dynamic
+            boot delay
+
+        TARGETS:
+            Any system that reflects CAPSLOCK will detect minimum required delay
+            Any system that does not reflect CAPSLOCK will hit the max delay of 3000ms
+    END_REM
+
+    REM CONFIGURATION:
+    DEFINE #RESPONSE_DELAY 25
+    DEFINE #ITERATION_LIMIT 120
+
+    VAR $C = 0
+    WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #ITERATION_LIMIT))
+        CAPSLOCK
+        DELAY #RESPONSE_DELAY
+        $C = ($C + 1)
+    END_WHILE
+    CAPSLOCK
+END_EXTENSION
+
+EXTENSION PASSCODE_ENTRY_CAPSONLY
+    REM VERSION 1.0
+    REM AUTHOR: Frostbyte
+    DEFINE #PASSCODE_RESPONSE_DELAY 25
+    DEFINE #PASSCODE_INITIAL_ITERATION_LIMIT 1000
+    DEFINE #PASSCODE_LEEWAY 2
+
+    FUNCTION CAPS_CHECK_LEEWAY()
+        IF ($_CAPSLOCK_ON == TRUE) THEN
+            VAR $CC_IS_ON = FALSE
+        ELSE
+            VAR $CC_IS_ON = TRUE
+        END_IF
+
+        VAR $CC_WAIT_COMP = $CC_WAIT-(#PASSCODE_LEEWAY*#PASSCODE_RESPONSE_DELAY)
+        DELAY $CC_WAIT_COMP
+        VAR $C = 0
+        WHILE (($_CAPSLOCK_ON != $CC_IS_ON) && ($C < (#PASSCODE_LEEWAY*2)))
+            DELAY #PASSCODE_RESPONSE_DELAY
+            $C = ($C + 1)
+        END_WHILE
+
+        IF($_CAPSLOCK_ON == $CC_IS_ON) THEN
+            RETURN TRUE
+        ELSE
+            RETURN FALSE
+        END_IF
+    END_FUNCTION
+END_EXTENSION
+
+VAR $C = 0
+VAR $PASSCODE_UNLOCK = FALSE
+STRINGLN Enter passcode
+WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #PASSCODE_INITIAL_ITERATION_LIMIT))
+    DELAY #PASSCODE_RESPONSE_DELAY
+    $C = ($C + 1)
+END_WHILE
+IF ($_CAPSLOCK_ON == TRUE) THEN
+    STRINGLN user entering...
+    VAR $CC_WAIT = 500
+    REM VAR $CC_RESULT = CAPS_CHECK_LEEWAY()
+    IF (CAPS_CHECK_LEEWAY() == TRUE) THEN
+    STRINGLN PASS 1
+    IF (CAPS_CHECK_LEEWAY() == TRUE) THEN
+    STRINGLN PASS 2
+    VAR $CC_WAIT = 300
+    IF (CAPS_CHECK_LEEWAY() == TRUE) THEN
+    STRINGLN PASS 3
+    IF (CAPS_CHECK_LEEWAY() == TRUE) THEN
+    STRINGLN PASS 4
+    IF (CAPS_CHECK_LEEWAY() == TRUE) THEN
+    $PASSCODE_UNLOCK = TRUE
+    END_IF
+    END_IF
+    END_IF
+    END_IF
+    END_IF
+ELSE
+    STRINGLN Passcode Timeout
+END_IF
+
+IF ($PASSCODE_UNLOCK == TRUE)
+    STRINGLN UNLOCKED
+    ATTACKMODE STORAGE
+ELSE
+    STRINGLN LOCKED
+END_IF
